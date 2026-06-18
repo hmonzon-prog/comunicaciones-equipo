@@ -130,6 +130,7 @@ header h2 span { color:#3b82f6; }
       <span id="statusDot" class="offline"></span>
       <span class="status-text" id="statusText">desconectado</span>
       <button class="btn btn-small" style="background:#475569;color:#fff;" onclick="addContact()">+ Añadir</button>
+      <button class="btn btn-small" style="background:#475569;color:#fff;" onclick="addBatch()">+ Equipo</button>
       <button class="btn btn-small btn-danger" onclick="leave()">Salir</button>
     </div>
   </header>
@@ -470,6 +471,19 @@ function addContact() {
     connectToPeer(pid, name.trim());
     showToast('Contacto añadido: ' + name.trim());
   }
+}
+
+function addBatch() {
+  const input = prompt('Escribí todos los nombres del equipo separados por coma:\nEj: luis, maria, juan, ana, pedro');
+  if (!input || !input.trim()) return;
+  const names = input.split(',').map(n => n.trim()).filter(n => n.length > 0 && n !== myName);
+  if (names.length === 0) { showToast('No hay nombres nuevos'); return; }
+  for (const n of names) {
+    saveContact(n);
+    const pid = `${myRoom}-${n}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    connectToPeer(pid, n);
+  }
+  showToast('Conectando con ' + names.length + ' contacto(s)...');
 }
 
 // ========== CHAT ==========
