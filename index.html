@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Comunicaciones Equipo</title>
-<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'Segoe UI',Roboto,sans-serif; background:#0f172a; color:#e2e8f0; height:100vh; display:flex; flex-direction:column; }
@@ -255,6 +255,13 @@ function leave() {
 function connectPeer() {
   if (peer) peer.destroy();
   peer = new Peer(myPeerId, { debug: 0 });
+  
+  peer.on('error', err => {
+    console.error('PeerJS error:', err);
+    if (err.message && err.message.includes('storage')) {
+      showToast('Storage bloqueado - la app igual funciona pero no recordará IDs', 4000);
+    }
+  });
   
   peer.on('open', id => {
     loginEl.classList.add('hidden');
@@ -618,13 +625,6 @@ function endCall() {
   remoteVideo.srcObject = null;
   localVideo.srcObject = null;
   if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; }
-  currentCall = null;
-  incomingCallReq = null;
-  callModal.classList.add('hidden');
-  incomingCall.classList.add('hidden');
-  if (callTimer) { clearInterval(callTimer); callTimer = null; }
-  showToast('Llamada finalizada');
-}
   currentCall = null;
   incomingCallReq = null;
   callModal.classList.add('hidden');
