@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Comunicaciones Equipo</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',Roboto,sans-serif; background:#0f172a; color:#e2e8f0; height:100vh; display:flex; flex-direction:column; }
+.hidden { display:none!important; }
+
+/* LOGIN */
+#login { display:flex; align-items:center; justify-content:center; height:100vh; padding:20px; }
+.login-box { background:#1e293b; border-radius:16px; padding:36px; width:100%; max-width:380px; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
+.login-box h1 { font-size:22px; margin-bottom:4px; text-align:center; }
+.login-box p { color:#94a3b8; font-size:13px; margin-bottom:24px; text-align:center; }
+.input-group { margin-bottom:14px; }
+.input-group label { display:block; font-size:12px; font-weight:600; color:#94a3b8; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px; }
+.input-group input { width:100%; padding:10px 14px; border-radius:8px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; font-size:14px; outline:none; }
+.input-group input:focus { border-color:#3b82f6; }
+.btn { width:100%; padding:11px; border-radius:8px; border:none; font-size:14px; font-weight:600; cursor:pointer; transition:all 0.15s; }
+.btn-primary { background:#3b82f6; color:#fff; }
+.btn-primary:hover { background:#2563eb; }
+.btn-primary:disabled { background:#475569; cursor:not-allowed; }
+.btn-danger { background:#ef4444; color:#fff; }
+.btn-danger:hover { background:#dc2626; }
+.btn-small { padding:6px 12px; font-size:12px; width:auto; }
+.online-count { text-align:center; color:#64748b; font-size:12px; margin-top:12px; }
+
+/* MAIN */
+#app { display:flex; flex-direction:column; height:100vh; }
+
+/* HEADER */
+header { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; background:#1e293b; border-bottom:1px solid #334155; flex-shrink:0; }
+header h2 { font-size:15px; font-weight:600; }
+header h2 span { color:#3b82f6; }
+.header-right { display:flex; align-items:center; gap:8px; }
+#statusDot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+.online { background:#22c55e; }
+.offline { background:#ef4444; }
+.status-text { font-size:12px; color:#94a3b8; }
+
+/* CONTACTS */
+#contactsBar { background:#1e293b; border-bottom:1px solid #334155; padding:8px 16px; flex-shrink:0; overflow-x:auto; white-space:nowrap; }
+.contact-chip { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:20px; font-size:12px; font-weight:500; margin-right:6px; background:#0f172a; cursor:pointer; transition:all 0.15s; }
+.contact-chip.online { border:1px solid #22c55e; color:#22c55e; }
+.contact-chip.offline { border:1px solid #475569; color:#64748b; opacity:0.6; }
+.contact-chip .dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.contact-chip .call-btn { background:transparent; border:none; color:inherit; cursor:pointer; padding:2px; font-size:13px; display:none; }
+.contact-chip .call-btn.show { display:inline-flex; }
+.contact-chip .call-btn:hover { color:#3b82f6; }
+
+/* CHAT */
+#chat { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.messages { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px; }
+.msg { max-width:85%; padding:10px 14px; border-radius:12px; font-size:14px; line-height:1.4; word-break:break-word; }
+.msg.system { align-self:center; background:transparent; color:#64748b; font-size:12px; font-style:italic; }
+.msg.me { align-self:flex-end; background:#3b82f6; color:#fff; border-bottom-right-radius:4px; }
+.msg.other { align-self:flex-start; background:#334155; color:#e2e8f0; border-bottom-left-radius:4px; }
+.msg .sender { font-size:11px; font-weight:600; color:#94a3b8; margin-bottom:2px; }
+.msg .time { font-size:10px; color:#94a3b8; margin-top:3px; text-align:right; }
+.input-area { display:flex; gap:8px; padding:12px 16px; background:#1e293b; border-top:1px solid #334155; flex-shrink:0; }
+.input-area input { flex:1; padding:10px 14px; border-radius:8px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; font-size:14px; outline:none; }
+.input-area input:focus { border-color:#3b82f6; }
+.input-area button { padding:10px 18px; border-radius:8px; border:none; background:#3b82f6; color:#fff; font-weight:600; cursor:pointer; font-size:13px; }
+.input-area button:hover { background:#2563eb; }
+.input-area button:disabled { opacity:0.4; cursor:not-allowed; }
+
+/* CALL MODAL */
+#callModal { position:fixed; inset:0; background:rgba(0,0,0,0.85); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; }
+#callModal video { width:100%; max-width:600px; max-height:60vh; background:#000; border-radius:12px; object-fit:contain; }
+#callModal .local-video { width:180px; max-height:140px; border-radius:8px; position:absolute; bottom:100px; right:20px; border:2px solid #3b82f6; object-fit:cover; }
+.call-info { margin:16px 0; text-align:center; }
+.call-info h3 { font-size:18px; }
+.call-info p { color:#94a3b8; font-size:13px; }
+.call-buttons { display:flex; gap:12px; }
+.call-btn-lg { width:56px; height:56px; border-radius:50%; border:none; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
+.call-btn-lg.hangup { background:#ef4444; color:#fff; }
+.call-btn-lg.hangup:hover { background:#dc2626; }
+.call-btn-lg.mute { background:#334155; color:#e2e8f0; }
+.call-btn-lg.mute:hover { background:#475569; }
+.call-btn-lg.mute.active { background:#ef4444; }
+.call-btn-lg.accept { background:#22c55e; color:#fff; }
+.call-btn-lg.accept:hover { background:#16a34a; }
+#incomingCall { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1e293b; border:1px solid #334155; border-radius:16px; padding:20px 28px; text-align:center; z-index:999; box-shadow:0 8px 32px rgba(0,0,0,0.6); min-width:280px; }
+#incomingCall h3 { margin-bottom:4px; }
+#incomingCall p { color:#94a3b8; font-size:13px; margin-bottom:16px; }
+#incomingCall .call-buttons { justify-content:center; }
+
+/* TOAST */
+.toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:#1e293b; border:1px solid #334155; border-radius:12px; padding:12px 20px; font-size:13px; z-index:100; box-shadow:0 4px 16px rgba(0,0,0,0.4); transition:all 0.3s; max-width:90%; text-align:center; }
+.toast.hidden { opacity:0; transform:translateX(-50%) translateY(20px); pointer-events:none; }
+
+@media(max-width:480px) {
+  .login-box { padding:24px; }
+  .msg { max-width:92%; font-size:13px; }
+  #callModal .local-video { width:120px; max-height:90px; bottom:80px; right:10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="login-box">
+    <h1>📞 Comunicaciones</h1>
+    <p>Equipo — Chat + Llamadas P2P</p>
+    <div class="input-group">
+      <label>Tu nombre</label>
+      <input id="userName" placeholder="Ej: Juan" autocomplete="off">
+    </div>
+    <div class="input-group">
+      <label>Sala (compartí este nombre con tu equipo)</label>
+      <input id="roomName" placeholder="Ej: logistica2026" autocomplete="off">
+    </div>
+    <button class="btn btn-primary" id="joinBtn" onclick="join()">Conectarse</button>
+    <p id="loginStatus" class="online-count" style="margin-top:10px;color:#ef4444;"></p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <header>
+    <div>
+      <h2>💬 <span id="headerRoom"></span></h2>
+    </div>
+    <div class="header-right">
+      <span id="headerUser" style="font-size:13px;color:#94a3b8;"></span>
+      <span id="statusDot" class="offline"></span>
+      <span class="status-text" id="statusText">desconectado</span>
+      <button class="btn btn-small" style="background:#475569;color:#fff;" onclick="addContact()">+ Añadir</button>
+      <button class="btn btn-small btn-danger" onclick="leave()">Salir</button>
+    </div>
+  </header>
+
+  <div id="contactsBar"></div>
+
+  <div id="chat">
+    <div class="messages" id="messages"></div>
+    <div class="input-area">
+      <input id="msgInput" placeholder="Escribí un mensaje..." onkeydown="if(event.key==='Enter') sendMsg()">
+      <button id="sendBtn" onclick="sendMsg()">Enviar</button>
+    </div>
+  </div>
+</div>
+
+<!-- INCOMING CALL -->
+<div id="incomingCall" class="hidden">
+  <h3 id="callerName">🔔 Llamada entrante</h3>
+  <p id="callType">Llamada de voz...</p>
+  <div class="call-buttons">
+    <button class="call-btn-lg accept" onclick="acceptCall()">📞</button>
+    <button class="call-btn-lg hangup" onclick="rejectCall()">✕</button>
+  </div>
+</div>
+
+<!-- CALL MODAL -->
+<div id="callModal" class="hidden">
+  <video id="remoteVideo" autoplay playsinline></video>
+  <video id="localVideo" class="local-video" autoplay playsinline muted></video>
+  <div class="call-info">
+    <h3 id="callWith">En llamada</h3>
+    <p id="callDuration">00:00</p>
+  </div>
+  <div class="call-buttons">
+    <button class="call-btn-lg mute" id="muteBtn" onclick="toggleMute()">🎤</button>
+    <button class="call-btn-lg hangup" onclick="endCall()">✕</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast hidden"></div>
+
+<script>
+// ========== STATE ==========
+let peer = null;
+let myName = '';
+let myRoom = '';
+let myPeerId = '';
+let connections = {};  // { peerId: { conn, name, status } }
+let onlinePeers = {};
+let currentCall = null;  // { mediaConnection, stream, isVideo, peerId, name }
+let incomingCallReq = null;
+let localStream = null;
+let isMuted = false;
+let knownContacts = JSON.parse(localStorage.getItem('comms_contacts') || '[]');
+let callTimer = null;
+let callSeconds = 0;
+let reconnectTimer = null;
+
+// ========== DOM REFS ==========
+const $ = id => document.getElementById(id);
+const loginEl = $('login');
+const appEl = $('app');
+const userName = $('userName');
+const roomName = $('roomName');
+const joinBtn = $('joinBtn');
+const loginStatus = $('loginStatus');
+const headerRoom = $('headerRoom');
+const headerUser = $('headerUser');
+const statusDot = $('statusDot');
+const statusText = $('statusText');
+const contactsBar = $('contactsBar');
+const messages = $('messages');
+const msgInput = $('msgInput');
+const sendBtn = $('sendBtn');
+const incomingCall = $('incomingCall');
+const callerName = $('callerName');
+const callType = $('callType');
+const callModal = $('callModal');
+const remoteVideo = $('remoteVideo');
+const localVideo = $('localVideo');
+const callWith = $('callWith');
+const callDuration = $('callDuration');
+const muteBtn = $('muteBtn');
+const toast = $('toast');
+
+// ========== AUTH ==========
+function join() {
+  const name = userName.value.trim();
+  const room = roomName.value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!name) { loginStatus.textContent = 'Ingresá tu nombre'; return; }
+  if (!room) { loginStatus.textContent = 'Ingresá el nombre de la sala'; return; }
+  if (name.length < 2 || name.length > 20) { loginStatus.textContent = 'Nombre: 2-20 caracteres'; return; }
+  myName = name;
+  myRoom = room;
+  myPeerId = `${room}-${name}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+  joinBtn.disabled = true;
+  loginStatus.textContent = 'Conectando...';
+  loginStatus.style.color = '#94a3b8';
+  connectPeer();
+}
+
+function leave() {
+  if (peer) peer.destroy();
+  peer = null;
+  connections = {};
+  onlinePeers = {};
+  if (currentCall) endCall();
+  appEl.classList.add('hidden');
+  loginEl.classList.remove('hidden');
+  joinBtn.disabled = false;
+  loginStatus.textContent = '';
+  msgInput.value = '';
+  messages.innerHTML = '';
+  contactsBar.innerHTML = '';
+  if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; }
+}
+
+// ========== PEER ==========
+function connectPeer() {
+  if (peer) peer.destroy();
+  peer = new Peer(myPeerId, { debug: 0 });
+  
+  peer.on('open', id => {
+    loginEl.classList.add('hidden');
+    appEl.classList.remove('hidden');
+    headerRoom.textContent = '#' + myRoom;
+    headerUser.textContent = '👤 ' + myName;
+    statusDot.className = 'online';
+    statusText.textContent = 'conectado';
+    addSystemMsg('Conectado como ' + myName + ' en #' + myRoom);
+    showToast('Conectado a la sala #' + myRoom);
+    saveContact(myName);
+    // Try connecting to known contacts
+    tryConnectAll();
+    reconnectTimer = setInterval(tryConnectAll, 15000);
+  });
+
+  peer.on('connection', conn => {
+    conn.on('open', () => {
+      // Send our info
+      conn.send({ type: 'info', name: myName, room: myRoom });
+      setupConnection(conn);
+    });
+    conn.on('data', data => handleData(conn, data));
+    conn.on('close', () => handleDisconnect(conn));
+  });
+
+  peer.on('call', call => {
+    // Incoming call
+    const peerName = getPeerName(call.peer);
+    incomingCallReq = call;
+    callerName.textContent = '🔔 ' + peerName;
+    callType.textContent = 'Llamada entrante...';
+    incomingCall.classList.remove('hidden');
+    showToast('Llamada entrante de ' + peerName);
+  });
+
+  peer.on('disconnected', () => {
+    statusDot.className = 'offline';
+    statusText.textContent = 'desconectado';
+    showToast('Desconectado. Reintentando...', 3000);
+    peer.reconnect();
+  });
+
+  peer.on('error', err => {
+    if (err.type === 'unavailable-id') {
+      loginStatus.textContent = 'Ese nombre ya está en uso en la sala';
+      loginStatus.style.color = '#ef4444';
+      joinBtn.disabled = false;
+      loginEl.classList.remove('hidden');
+      appEl.classList.add('hidden');
+      return;
+    }
+    console.warn('Peer error:', err);
+  });
+}
+
+function tryConnectAll() {
+  const all = [...new Set([...knownContacts, ...Object.keys(connections).map(k => getPeerName(k))])];
+  for (const c of all) {
+    if (!c || c === myName) continue;
+    const pid = `${myRoom}-${c}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (pid === myPeerId) continue;
+    if (connections[pid] && connections[pid].status === 'connected') continue;
+    connectToPeer(pid, c);
+  }
+  renderContacts();
+}
+
+function connectToPeer(pid, name) {
+  if (connections[pid]) {
+    if (connections[pid].status === 'connecting' || connections[pid].status === 'connected') return;
+  }
+  connections[pid] = { conn: null, name, status: 'connecting' };
+  const conn = peer.connect(pid, { reliable: true });
+  conn.on('open', () => {
+    conn.send({ type: 'info', name: myName, room: myRoom });
+    connections[pid] = { conn, name, status: 'connected' };
+    onlinePeers[pid] = true;
+    addSystemMsg(name + ' se conectó');
+    showToast('Conectado con ' + name);
+    renderContacts();
+  });
+  conn.on('data', data => handleData(conn, data));
+  conn.on('close', () => {
+    if (connections[pid]) connections[pid].status = 'disconnected';
+    delete onlinePeers[pid];
+    renderContacts();
+  });
+  conn.on('error', () => {
+    if (connections[pid]) connections[pid].status = 'disconnected';
+    delete connections[pid];
+    renderContacts();
+  });
+  connections[pid] = { conn, name, status: 'connecting' };
+  renderContacts();
+}
+
+function setupConnection(conn) {
+  // conn already has peer, we need to figure out who they are
+  // We'll get their info via the 'info' message
+}
+
+function getPeerName(peerId) {
+  // peerId format: room-name
+  const parts = peerId.split('-');
+  return parts.slice(1).join('-') || peerId;
+}
+
+function handleData(conn, data) {
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch(e) { return; }
+  }
+  if (!data || !data.type) return;
+
+  const peerName = getPeerName(conn.peer);
+
+  switch (data.type) {
+    case 'info':
+      if (!connections[conn.peer]) {
+        connections[conn.peer] = { conn, name: data.name, status: 'connected' };
+        onlinePeers[conn.peer] = true;
+        saveContact(data.name);
+        addSystemMsg(data.name + ' se conectó');
+        renderContacts();
+      } else {
+        connections[conn.peer].name = data.name;
+        connections[conn.peer].status = 'connected';
+        onlinePeers[conn.peer] = true;
+      }
+      break;
+    case 'msg':
+      addMsg(peerName, data.text, data.time);
+      break;
+    case 'system':
+      addSystemMsg(data.text);
+      break;
+  }
+}
+
+function handleDisconnect(conn) {
+  const name = connections[conn.peer]?.name || getPeerName(conn.peer);
+  if (connections[conn.peer]) connections[conn.peer].status = 'disconnected';
+  delete onlinePeers[conn.peer];
+  addSystemMsg(name + ' se desconectó');
+  renderContacts();
+}
+
+// ========== CONTACTS ==========
+function renderContacts() {
+  const allIds = new Set();
+  for (const pid of Object.keys(connections)) {
+    const c = connections[pid];
+    if (c.status === 'connected') allIds.add(pid);
+  }
+  for (const c of knownContacts) {
+    if (c === myName) continue;
+    const pid = `${myRoom}-${c}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (!connections[pid] || connections[pid].status !== 'connected') continue;
+    allIds.add(pid);
+  }
+
+  if (allIds.size === 0) {
+    contactsBar.innerHTML = '<span style="color:#64748b;font-size:13px;">Sin contactos conectados. Compartí el nombre de la sala con tu equipo.</span>';
+    return;
+  }
+
+  contactsBar.innerHTML = Array.from(allIds).map(pid => {
+    const c = connections[pid];
+    const name = c ? c.name : getPeerName(pid);
+    const isOnline = onlinePeers[pid] || false;
+    return `<div class="contact-chip ${isOnline ? 'online' : 'offline'}">
+      <span class="dot" style="background:${isOnline ? '#22c55e' : '#475569'}"></span>
+      ${name}
+      <button class="call-btn ${isOnline ? 'show' : ''}" onclick="startCall('${pid}','${name}',false)" title="Llamada voz">📞</button>
+      <button class="call-btn ${isOnline ? 'show' : ''}" onclick="startCall('${pid}','${name}',true)" title="Videollamada">📹</button>
+    </div>`;
+  }).join('');
+}
+
+function saveContact(name) {
+  if (!knownContacts.includes(name) && name !== myName) {
+    knownContacts.push(name);
+    localStorage.setItem('comms_contacts', JSON.stringify(knownContacts));
+  }
+}
+
+function addContact() {
+  const name = prompt('Nombre del contacto a añadir:');
+  if (name && name.trim()) {
+    saveContact(name.trim());
+    const pid = `${myRoom}-${name.trim()}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    connectToPeer(pid, name.trim());
+    showToast('Contacto añadido: ' + name.trim());
+  }
+}
+
+// ========== CHAT ==========
+function sendMsg() {
+  const text = msgInput.value.trim();
+  if (!text) return;
+  const time = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  addMsg('Yo', text, time, true);
+  broadcast({ type: 'msg', text, time });
+  msgInput.value = '';
+}
+
+function addMsg(sender, text, time, isMe = false) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + (isMe ? 'me' : 'other');
+  if (!isMe) div.innerHTML = `<div class="sender">${sender}</div>`;
+  div.innerHTML += text;
+  if (time) div.innerHTML += `<div class="time">${time}</div>`;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function addSystemMsg(text) {
+  const div = document.createElement('div');
+  div.className = 'msg system';
+  div.textContent = text;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function broadcast(data) {
+  const msg = JSON.stringify(data);
+  for (const pid of Object.keys(connections)) {
+    const c = connections[pid];
+    if (c && c.conn && c.conn.open && c.status === 'connected') {
+      try { c.conn.send(msg); } catch(e) {}
+    }
+  }
+}
+
+// ========== CALLS ==========
+function startCall(peerId, name, video) {
+  if (currentCall) { showToast('Ya estás en una llamada'); return; }
+  showToast('Llamando a ' + name + '...');
+  navigator.mediaDevices.getUserMedia({ audio: true, video }).then(stream => {
+    localStream = stream;
+    localVideo.srcObject = stream;
+    localVideo.style.display = video ? 'block' : 'none';
+    const call = peer.call(peerId, stream, { video });
+    setupCall(call, name, video, peerId);
+  }).catch(err => {
+    showToast('Error: ' + err.message);
+  });
+}
+
+function acceptCall() {
+  if (!incomingCallReq) return;
+  incomingCall.classList.add('hidden');
+  const name = getPeerName(incomingCallReq.peer);
+  const isVideo = incomingCallReq.metadata && incomingCallReq.metadata.video;
+  navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo || false }).then(stream => {
+    localStream = stream;
+    localVideo.srcObject = stream;
+    localVideo.style.display = (isVideo || false) ? 'block' : 'none';
+    incomingCallReq.answer(stream);
+    setupCall(incomingCallReq, name, isVideo || false, incomingCallReq.peer);
+    incomingCallReq = null;
+  }).catch(err => {
+    showToast('Error: ' + err.message);
+    incomingCallReq = null;
+  });
+}
+
+function rejectCall() {
+  if (incomingCallReq) {
+    incomingCallReq.close();
+    incomingCallReq = null;
+  }
+  incomingCall.classList.add('hidden');
+  showToast('Llamada rechazada');
+}
+
+function setupCall(mediaConnection, name, video, peerId) {
+  currentCall = { mediaConnection, name, isVideo: video, peerId };
+  callModal.classList.remove('hidden');
+  callWith.textContent = '📞 ' + name;
+  muteBtn.textContent = '🎤';
+  isMuted = false;
+  callSeconds = 0;
+  callDuration.textContent = '00:00';
+  if (callTimer) clearInterval(callTimer);
+  callTimer = setInterval(() => {
+    callSeconds++;
+    const m = String(Math.floor(callSeconds / 60)).padStart(2, '0');
+    const s = String(callSeconds % 60).padStart(2, '0');
+    callDuration.textContent = m + ':' + s;
+  }, 1000);
+
+  mediaConnection.on('stream', remoteStream => {
+    remoteVideo.srcObject = remoteStream;
+  });
+
+  mediaConnection.on('close', () => {
+    endCall();
+  });
+
+  if (video) {
+    remoteVideo.style.display = 'block';
+  }
+}
+
+function endCall() {
+  if (currentCall && currentCall.mediaConnection) {
+    currentCall.mediaConnection.close();
+  }
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  remoteVideo.srcObject = null;
+  localVideo.srcObject = null;
+  currentCall = null;
+  incomingCallReq = null;
+  callModal.classList.add('hidden');
+  incomingCall.classList.add('hidden');
+  if (callTimer) { clearInterval(callTimer); callTimer = null; }
+  showToast('Llamada finalizada');
+}
+
+function toggleMute() {
+  if (!localStream) return;
+  isMuted = !isMuted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+  muteBtn.textContent = isMuted ? '🔇' : '🎤';
+  muteBtn.classList.toggle('active', isMuted);
+}
+
+// ========== TOAST ==========
+let toastTimer = null;
+function showToast(msg, duration = 2000) {
+  toast.textContent = msg;
+  toast.classList.remove('hidden');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.add('hidden'), duration);
+}
+
+// ========== INIT ==========
+// Restore last room/name
+const savedName = localStorage.getItem('comms_last_name');
+const savedRoom = localStorage.getItem('comms_last_room');
+if (savedName) userName.value = savedName;
+if (savedRoom) roomName.value = savedRoom;
+// Auto-save
+userName.addEventListener('input', () => localStorage.setItem('comms_last_name', userName.value));
+roomName.addEventListener('input', () => localStorage.setItem('comms_last_room', roomName.value));
+</script>
+</body>
+</html>
