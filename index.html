@@ -182,6 +182,33 @@ let myRoom = '';
 let myPeerId = '';
 let connections = {};  // { peerId: { conn, name, status } }
 let onlinePeers = {};
+let ringtoneInterval = null;
+
+function startRingtone() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    let toggle = false;
+    ringtoneInterval = setInterval(() => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = toggle ? 880 : 660;
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.3);
+      toggle = !toggle;
+    }, 600);
+  } catch(e) { console.warn('Ringtone error:', e); }
+}
+
+function stopRingtone() {
+  if (ringtoneInterval) { clearInterval(ringtoneInterval); ringtoneInterval = null; }
+}
+
 let currentCall = null;
 let incomingCallReq = null;
 let localStream = null;
@@ -303,6 +330,7 @@ function connectPeer() {
     callType.textContent = 'Llamada entrante...';
     incomingCall.classList.remove('hidden');
     showToast('Llamada entrante de ' + peerName);
+    startRingtone();
   });
 
   peer.on('disconnected', () => {
@@ -538,6 +566,7 @@ function broadcast(data) {
 }
 
 function playRemoteStream(remoteStream) {
+  stopRingtone();
   console.log('🔊 playRemoteStream called, audio tracks:', remoteStream.getAudioTracks().length);
   remoteVideo.srcObject = remoteStream;
   remoteVideo.play().catch(() => {});
@@ -559,8 +588,8 @@ function playRemoteStream(remoteStream) {
 function startCall(peerId, name, video) {
   if (currentCall) { showToast('Ya estás en una llamada'); return; }
   showToast('Llamando a ' + name + '...');
-  // Pre-create AudioContext during user gesture
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  startRingtone();
   navigator.mediaDevices.getUserMedia({ audio: true, video }).then(stream => {
     localStream = stream;
     localVideo.srcObject = stream;
@@ -578,6 +607,7 @@ function startCall(peerId, name, video) {
 
 function acceptCall() {
   if (!incomingCallReq) return;
+  stopRingtone();
   incomingCall.classList.add('hidden');
   const call = incomingCallReq;
   incomingCallReq = null;
@@ -600,6 +630,7 @@ function acceptCall() {
 }
 
 function rejectCall() {
+  stopRingtone();
   if (incomingCallReq) {
     incomingCallReq.close();
     incomingCallReq = null;
@@ -626,6 +657,7 @@ function showCallUI(name, video) {
 }
 
 function endCall() {
+  stopRingtone();
   if (currentCall && currentCall.call) {
     try { currentCall.call.close(); } catch(e) {}
   }
