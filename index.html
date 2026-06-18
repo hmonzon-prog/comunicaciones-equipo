@@ -320,10 +320,17 @@ function connectPeer() {
 
   peer.on('call', call => {
     const peerName = getPeerName(call.peer);
-    // Register stream handler early so we don't miss it
     call.on('stream', remoteStream => {
       console.log('📥 Remote stream received, audio tracks:', remoteStream.getAudioTracks().length);
       playRemoteStream(remoteStream);
+    });
+    call.on('close', () => {
+      stopRingtone();
+      incomingCall.classList.add('hidden');
+      if (incomingCallReq) {
+        showToast('Llamada cancelada por el otro usuario');
+        incomingCallReq = null;
+      }
     });
     incomingCallReq = call;
     callerName.textContent = '🔔 ' + peerName;
