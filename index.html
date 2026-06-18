@@ -159,6 +159,7 @@ header h2 span { color:#3b82f6; }
 <!-- CALL MODAL -->
 <div id="callModal" class="hidden">
   <video id="remoteVideo" autoplay playsinline></video>
+  <audio id="remoteAudio" autoplay></audio>
   <video id="localVideo" class="local-video" autoplay playsinline muted></video>
   <div class="call-info">
     <h3 id="callWith">En llamada</h3>
@@ -283,8 +284,14 @@ function connectPeer() {
   });
 
   peer.on('call', call => {
-    // Incoming call
     const peerName = getPeerName(call.peer);
+    // Register stream handler immediately so we don't miss it
+    call.on('stream', remoteStream => {
+      remoteVideo.srcObject = remoteStream;
+      document.getElementById('remoteAudio').srcObject = remoteStream;
+      remoteVideo.play().catch(() => {});
+      document.getElementById('remoteAudio').play().catch(() => {});
+    });
     incomingCallReq = call;
     callerName.textContent = '🔔 ' + peerName;
     callType.textContent = 'Llamada entrante...';
@@ -582,8 +589,13 @@ function setupCall(mediaConnection, name, video, peerId) {
     callDuration.textContent = m + ':' + s;
   }, 1000);
 
+  const remoteAudio = document.getElementById('remoteAudio');
+
   mediaConnection.on('stream', remoteStream => {
     remoteVideo.srcObject = remoteStream;
+    remoteAudio.srcObject = remoteStream;
+    remoteVideo.play().catch(() => {});
+    remoteAudio.play().catch(() => {});
   });
 
   mediaConnection.on('close', () => {
@@ -592,6 +604,8 @@ function setupCall(mediaConnection, name, video, peerId) {
 
   if (video) {
     remoteVideo.style.display = 'block';
+  } else {
+    remoteVideo.style.display = 'none';
   }
 }
 
@@ -604,6 +618,8 @@ function endCall() {
     localStream = null;
   }
   remoteVideo.srcObject = null;
+  const audioEl = document.getElementById('remoteAudio');
+  if (audioEl) audioEl.srcObject = null;
   localVideo.srcObject = null;
   currentCall = null;
   incomingCallReq = null;
