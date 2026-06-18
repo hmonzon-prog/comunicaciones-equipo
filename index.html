@@ -293,6 +293,11 @@ function connectPeer() {
 
   peer.on('call', call => {
     const peerName = getPeerName(call.peer);
+    // Register stream handler early so we don't miss it
+    call.on('stream', remoteStream => {
+      console.log('📥 Remote stream received, audio tracks:', remoteStream.getAudioTracks().length);
+      playRemoteStream(remoteStream);
+    });
     incomingCallReq = call;
     callerName.textContent = '🔔 ' + peerName;
     callType.textContent = 'Llamada entrante...';
@@ -533,9 +538,11 @@ function broadcast(data) {
 }
 
 function playRemoteStream(remoteStream) {
+  console.log('🔊 playRemoteStream called, audio tracks:', remoteStream.getAudioTracks().length);
   remoteVideo.srcObject = remoteStream;
   remoteVideo.play().catch(() => {});
-  // Web Audio API for reliable audio output
+  const audioEl = document.getElementById('remoteAudio');
+  if (audioEl) { audioEl.srcObject = remoteStream; audioEl.play().catch(e => console.warn('audioEl play:', e)); }
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -544,6 +551,7 @@ function playRemoteStream(remoteStream) {
     gain.gain.value = 1;
     src.connect(gain);
     gain.connect(audioCtx.destination);
+    console.log('✅ AudioContext connected');
   } catch(e) { console.warn('AudioContext error:', e); }
 }
 
@@ -551,6 +559,8 @@ function playRemoteStream(remoteStream) {
 function startCall(peerId, name, video) {
   if (currentCall) { showToast('Ya estás en una llamada'); return; }
   showToast('Llamando a ' + name + '...');
+  // Pre-create AudioContext during user gesture
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   navigator.mediaDevices.getUserMedia({ audio: true, video }).then(stream => {
     localStream = stream;
     localVideo.srcObject = stream;
@@ -570,22 +580,23 @@ function acceptCall() {
   if (!incomingCallReq) return;
   incomingCall.classList.add('hidden');
   const call = incomingCallReq;
+  incomingCallReq = null;
   const name = getPeerName(call.peer);
   const isVideo = call.metadata && call.metadata.video;
+  // Pre-create AudioContext during user gesture
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo || false }).then(stream => {
     localStream = stream;
     localVideo.srcObject = stream;
     localVideo.style.display = isVideo ? 'block' : 'none';
     localVideo.play().catch(() => {});
     call.answer(stream);
-    call.on('stream', remoteStream => playRemoteStream(remoteStream));
     call.on('close', () => endCall());
     currentCall = { call, name, isVideo, peerId: call.peer };
     showCallUI(name, isVideo);
   }).catch(err => {
     showToast('Error al acceder al micrófono: ' + err.message);
   });
-  incomingCallReq = null;
 }
 
 function rejectCall() {
