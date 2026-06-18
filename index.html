@@ -270,12 +270,15 @@ function connectPeer() {
 
   peer.on('connection', conn => {
     conn.on('open', () => {
-      // Send our info
       conn.send({ type: 'info', name: myName, room: myRoom });
-      setupConnection(conn);
     });
     conn.on('data', data => handleData(conn, data));
     conn.on('close', () => handleDisconnect(conn));
+    // Add to connections with a placeholder until we get the info
+    if (!connections[conn.peer]) {
+      connections[conn.peer] = { conn, name: getPeerName(conn.peer), status: 'connected' };
+      onlinePeers[conn.peer] = true;
+    }
   });
 
   peer.on('call', call => {
@@ -373,13 +376,34 @@ function handleData(conn, data) {
       if (!connections[conn.peer]) {
         connections[conn.peer] = { conn, name: data.name, status: 'connected' };
         onlinePeers[conn.peer] = true;
-        saveContact(data.name);
-        addSystemMsg(data.name + ' se conectó');
-        renderContacts();
       } else {
         connections[conn.peer].name = data.name;
         connections[conn.peer].status = 'connected';
         onlinePeers[conn.peer] = true;
+      }
+      saveContact(data.name);
+      addSystemMsg(data.name + ' se conectó');
+      renderContacts();
+      // Share our contact list so they can discover the rest of the team
+      const others = Object.values(connections).filter(c => c.name !== data.name && c.status === 'connected').map(c => c.name);
+      if (others.length > 0 && conn.open) {
+        conn.send(JSON.stringify({ type: 'contacts', list: others }));
+      }
+      // Tell existing peers about this new person
+      broadcast({ type: 'newpeer', name: data.name, peerId: conn.peer });
+      break;
+    case 'newpeer':
+      // Try to connect to the new peer
+      if (data.name && data.name !== myName && !connections[data.peerId] && !onlinePeers[data.peerId]) {
+        connectToPeer(data.peerId, data.name);
+      }
+      break;
+    case 'contacts':
+      if (data.list && Array.isArray(data.list)) {
+        for (const c of data.list) {
+          if (c !== myName) saveContact(c);
+        }
+        tryConnectAll();
       }
       break;
     case 'msg':
