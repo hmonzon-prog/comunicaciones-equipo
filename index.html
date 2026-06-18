@@ -184,6 +184,12 @@ let connections = {};  // { peerId: { conn, name, status } }
 let onlinePeers = {};
 let ringtoneInterval = null;
 
+function notify(title, body) {
+  if (Notification.permission === 'granted') {
+    try { new Notification(title, { body, icon: '/favicon.ico' }); } catch(e) {}
+  }
+}
+
 function startRingtone() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -259,6 +265,7 @@ function join() {
   joinBtn.disabled = true;
   loginStatus.textContent = 'Conectando...';
   loginStatus.style.color = '#94a3b8';
+  if (Notification.permission === 'default') Notification.requestPermission();
   connectPeer();
 }
 
@@ -337,6 +344,7 @@ function connectPeer() {
     callType.textContent = 'Llamada entrante...';
     incomingCall.classList.remove('hidden');
     showToast('Llamada entrante de ' + peerName);
+    notify('Llamada entrante', peerName + ' te está llamando');
     startRingtone();
   });
 
@@ -457,6 +465,7 @@ function handleData(conn, data) {
       break;
     case 'msg':
       addMsg(peerName, data.text, data.time);
+      if (document.hidden) notify('Mensaje de ' + peerName, data.text);
       break;
     case 'system':
       addSystemMsg(data.text);
