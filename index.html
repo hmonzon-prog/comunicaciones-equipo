@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Comunicaciones Equipo</title>
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'Segoe UI',Roboto,sans-serif; background:#0f172a; color:#e2e8f0; height:100vh; display:flex; flex-direction:column; }
@@ -182,7 +182,7 @@ let myRoom = '';
 let myPeerId = '';
 let connections = {};  // { peerId: { conn, name, status } }
 let onlinePeers = {};
-let currentCall = null;  // { mediaConnection, stream, isVideo, peerId, name }
+let currentCall = null;
 let incomingCallReq = null;
 let localStream = null;
 let isMuted = false;
@@ -190,6 +190,7 @@ let knownContacts = JSON.parse(localStorage.getItem('comms_contacts') || '[]');
 let callTimer = null;
 let callSeconds = 0;
 let reconnectTimer = null;
+let audioCtx = null;
 
 // ========== DOM REFS ==========
 const $ = id => document.getElementById(id);
@@ -285,13 +286,6 @@ function connectPeer() {
 
   peer.on('call', call => {
     const peerName = getPeerName(call.peer);
-    // Register stream handler immediately so we don't miss it
-    call.on('stream', remoteStream => {
-      remoteVideo.srcObject = remoteStream;
-      document.getElementById('remoteAudio').srcObject = remoteStream;
-      remoteVideo.play().catch(() => {});
-      document.getElementById('remoteAudio').play().catch(() => {});
-    });
     incomingCallReq = call;
     callerName.textContent = '🔔 ' + peerName;
     callType.textContent = 'Llamada entrante...';
@@ -531,6 +525,21 @@ function broadcast(data) {
   }
 }
 
+function playRemoteStream(remoteStream) {
+  remoteVideo.srcObject = remoteStream;
+  remoteVideo.play().catch(() => {});
+  // Web Audio API for reliable audio output
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const src = audioCtx.createMediaStreamSource(remoteStream);
+    const gain = audioCtx.createGain();
+    gain.gain.value = 1;
+    src.connect(gain);
+    gain.connect(audioCtx.destination);
+  } catch(e) { console.warn('AudioContext error:', e); }
+}
+
 // ========== CALLS ==========
 function startCall(peerId, name, video) {
   if (currentCall) { showToast('Ya estás en una llamada'); return; }
@@ -539,29 +548,37 @@ function startCall(peerId, name, video) {
     localStream = stream;
     localVideo.srcObject = stream;
     localVideo.style.display = video ? 'block' : 'none';
+    localVideo.play().catch(() => {});
     const call = peer.call(peerId, stream, { video });
-    setupCall(call, name, video, peerId);
+    call.on('stream', remoteStream => playRemoteStream(remoteStream));
+    call.on('close', () => endCall());
+    currentCall = { call, name, isVideo: video, peerId };
+    showCallUI(name, video);
   }).catch(err => {
-    showToast('Error: ' + err.message);
+    showToast('Error al acceder al micrófono: ' + err.message);
   });
 }
 
 function acceptCall() {
   if (!incomingCallReq) return;
   incomingCall.classList.add('hidden');
-  const name = getPeerName(incomingCallReq.peer);
-  const isVideo = incomingCallReq.metadata && incomingCallReq.metadata.video;
+  const call = incomingCallReq;
+  const name = getPeerName(call.peer);
+  const isVideo = call.metadata && call.metadata.video;
   navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo || false }).then(stream => {
     localStream = stream;
     localVideo.srcObject = stream;
-    localVideo.style.display = (isVideo || false) ? 'block' : 'none';
-    incomingCallReq.answer(stream);
-    setupCall(incomingCallReq, name, isVideo || false, incomingCallReq.peer);
-    incomingCallReq = null;
+    localVideo.style.display = isVideo ? 'block' : 'none';
+    localVideo.play().catch(() => {});
+    call.answer(stream);
+    call.on('stream', remoteStream => playRemoteStream(remoteStream));
+    call.on('close', () => endCall());
+    currentCall = { call, name, isVideo, peerId: call.peer };
+    showCallUI(name, isVideo);
   }).catch(err => {
-    showToast('Error: ' + err.message);
-    incomingCallReq = null;
+    showToast('Error al acceder al micrófono: ' + err.message);
   });
+  incomingCallReq = null;
 }
 
 function rejectCall() {
@@ -573,12 +590,12 @@ function rejectCall() {
   showToast('Llamada rechazada');
 }
 
-function setupCall(mediaConnection, name, video, peerId) {
-  currentCall = { mediaConnection, name, isVideo: video, peerId };
+function showCallUI(name, video) {
   callModal.classList.remove('hidden');
   callWith.textContent = '📞 ' + name;
   muteBtn.textContent = '🎤';
   isMuted = false;
+  remoteVideo.style.display = video ? 'block' : 'none';
   callSeconds = 0;
   callDuration.textContent = '00:00';
   if (callTimer) clearInterval(callTimer);
@@ -588,39 +605,26 @@ function setupCall(mediaConnection, name, video, peerId) {
     const s = String(callSeconds % 60).padStart(2, '0');
     callDuration.textContent = m + ':' + s;
   }, 1000);
-
-  const remoteAudio = document.getElementById('remoteAudio');
-
-  mediaConnection.on('stream', remoteStream => {
-    remoteVideo.srcObject = remoteStream;
-    remoteAudio.srcObject = remoteStream;
-    remoteVideo.play().catch(() => {});
-    remoteAudio.play().catch(() => {});
-  });
-
-  mediaConnection.on('close', () => {
-    endCall();
-  });
-
-  if (video) {
-    remoteVideo.style.display = 'block';
-  } else {
-    remoteVideo.style.display = 'none';
-  }
 }
 
 function endCall() {
-  if (currentCall && currentCall.mediaConnection) {
-    currentCall.mediaConnection.close();
+  if (currentCall && currentCall.call) {
+    try { currentCall.call.close(); } catch(e) {}
   }
   if (localStream) {
     localStream.getTracks().forEach(t => t.stop());
     localStream = null;
   }
   remoteVideo.srcObject = null;
-  const audioEl = document.getElementById('remoteAudio');
-  if (audioEl) audioEl.srcObject = null;
   localVideo.srcObject = null;
+  if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; }
+  currentCall = null;
+  incomingCallReq = null;
+  callModal.classList.add('hidden');
+  incomingCall.classList.add('hidden');
+  if (callTimer) { clearInterval(callTimer); callTimer = null; }
+  showToast('Llamada finalizada');
+}
   currentCall = null;
   incomingCallReq = null;
   callModal.classList.add('hidden');
